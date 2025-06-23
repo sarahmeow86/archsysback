@@ -17,23 +17,39 @@ rm -rf work out
 
 umask 0022
 
+# Ensure /timeshift is a btrfs subvolume
+make_timeshift_subvolume() {
+    if ! btrfs subvolume list / | grep -q "timeshift"; then
+        echo "Creating btrfs subvolume for /timeshift"
+        btrfs subvolume create /timeshift
+    else
+        echo "/timeshift btrfs subvolume already exists"
+    fi
+}
+
+# Mount the btrfs subvolume to /timeshift
+mount_timeshift_subvolume() {
+    mountpoint -q /timeshift && return
+    rootdev=$(findmnt -n -o SOURCE /)
+    mount -o subvol=timeshift $rootdev /timeshift
+}
+
 # Create timeshift config
 make_timeshift_conf() {
 
 # UUID of root partition
-uuid=$(blkid |grep $(mount |grep 'on / ' |cut -d ' ' -f 1) |cut -d ' ' -f 3 | cut -d '"' -f 2 -)
+uuid=$(blkid | grep "$(mount | grep 'on / ' | cut -d ' ' -f 1)" | cut -d ' ' -f 3 | cut -d '"' -f 2 -)
 # localized desktop name, need to backup desktop shortcuts
 desktop_name=$(xdg-user-dir DESKTOP |cut -d "/" -f-2 --complement)
 # default timeshift config
 FILE=/etc/timeshift.json
 
-if [ ! -f "$FILE" ]; then
 cat <<EOF > "$FILE"
 {
   "backup_device_uuid" : "$uuid",
   "parent_device_uuid" : "",
   "do_first_run" : "false",
-  "btrfs_mode" : "false",
+  "btrfs_mode" : "true",
   "include_btrfs_home_for_backup" : "false",
   "include_btrfs_home_for_restore" : "false",
   "stop_cron_emails" : "true",
@@ -72,44 +88,26 @@ cat <<EOF > "$FILE"
 EOF
 echo "$FILE created."
 
-else 
-
-echo "$FILE exist already."
-fi
 
 }
 
-# make fresh timeshift backup
-make_timeshift_backup(){
-
+# make fresh timeshift backup(){
 DIR=/timeshift
-if [ ! -e $DIR ]; then
-    mkdir -p $DIR/snapshots \
-    $DIR/snapshots-boot \
-    $DIR/snapshots-daily \
-    $DIR/snapshots-hourly \
-    $DIR/snapshots-monthly \
-    $DIR/snapshots-ondemand \
-    $DIR/snapshots-weekly
-
-timeshift --create --scripted --rsync --snapshot-device $(mount |grep "on / " |cut -d " " -f1)
-
-else
+if [ ! -d $DIR ]; then
+    mkdir -p $DIR
+fi
 
 # Full system backup with timeshift, delete old snapshots first
-
 timeshift --delete-all
-timeshift --create --scripted --rsync --snapshot-device $(mount |grep "on / " |cut -d " " -f1)
+timeshift --create --scripted --snapshot-device "$(mount |grep "on / " |cut -d " " -f1)"
 
-fi
-
-}
 
 # Base installation (airootfs)
 make_basefs() {
 mkdir -p ${work_dir}
 
-cd /timeshift/snapshots/*/localhost
+# Find the latest timeshift snapshot's localhost directory (btrfs mode)
+cd "$(ls -d /timeshift/snapshots/*/localhost 2>/dev/null | sort | tail -n1)"
 
 # Backup the original fstab as fstab.orig
 mv etc/fstab etc/fstab.orig
@@ -262,6 +260,8 @@ make_iso() {
     mkarchiso -v -w "${work_dir}" -D "${install_dir}" -L "${iso_label}" -o "${out_dir}" iso "${iso_name}-${iso_version}-${arch}.iso"
 }
 
+make_timeshift_subvolume
+mount_timeshift_subvolume
 make_timeshift_conf
 make_timeshift_backup
 make_basefs
@@ -270,6 +270,10 @@ make_boot
 make_boot_extra
 make_syslinux
 make_isolinux
+make_efi
+make_efiboot
+make_prepare
+make_iso
 make_efi
 make_efiboot
 make_prepare
