@@ -1,0 +1,11 @@
+[Desktop Entry]
+Name=Create Hybrid System backup ISO
+Comment=Create your own hybrid bootable live iso from installed system.
+Comment=Saját hybrid bootolható live iso készítése a telepített rendszerből.
+Exec=xterm -fg white -bg black -fa 'Monospace' -fs 16 -hold -e 'pkexec archsysback'
+Icon=archsysback
+Terminal=false
+X-MultipleArgs=false
+Type=Application
+Categories=System;
+Name[hu_HU]=Hybrid ISO Rendszermentés Készítése
